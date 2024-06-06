@@ -1,7 +1,8 @@
 use serde_json::Value;
 use std::collections::HashMap;
 use std::error::Error;
-use urlencoding::encode;
+use std::time::Duration;
+use serde_json::json;
 
 #[no_mangle]
 pub fn translate(
@@ -12,47 +13,105 @@ pub fn translate(
     detect: &str, // 检测到的语言 (若使用 detect, 需要手动转换)
     needs: HashMap<String, String>, // 插件需要的其他参数,由info.json定义
 ) -> Result<Value, Box<dyn Error>> {
-    let client = reqwest::blocking::ClientBuilder::new().build()?;
 
-    let mut url = match needs.get("requestPath") {
-        Some(url) => url.to_string(),
-        None => "lingva.pot-app.com".to_string(),
+    let timeout = match needs.get("timeout") {
+        Some(timeout) => timeout.parse::<u64>().unwrap_or(30),
+        None => 30, // 默认超时时间为30秒
     };
-    if url.is_empty() {
-        url = "lingva.pot-app.com".to_string();
-    }
-    if !url.starts_with("http") {
-        url = format!("https://{}", url);
-    }
 
-    let plain_text = text.replace("/", "@@");
-    let encode_text = encode(plain_text.as_str());
+    let client = reqwest::blocking::ClientBuilder::new()
+        .timeout(Duration::from_secs(timeout))
+        .build()?;
 
-    let res: Value = client
-        .get(format!("{url}/api/v1/{from}/{to}/{encode_text}"))
-        .send()?
-        .json()?;
+    let apikey = match needs.get("apikey") {
+        Some(apikey) => apikey.to_string(),
+        None => return Err("apikey not found".into()),
+    };
 
-    fn parse_result(res: Value) -> Option<String> {
-        let result = res.as_object()?.get("translation")?.as_str()?.to_string();
+    let endpoint = match needs.get("endpoint") {
+        Some(endpoint) => endpoint.to_string(),
+        None => "https://api.openai.com/v1/chat/completions".to_string(),
+    };
 
-        Some(result.replace("@@", "/"))
-    }
-    if let Some(result) = parse_result(res) {
-        return Ok(Value::String(result));
-    } else {
-        return Err("Response Parse Error".into());
-    }
-}
+    let model = match needs.get("model") {
+        Some(model) => model.to_string(),
+        None => "gpt-4o".to_string(),
+    };
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn try_request() {
-        let mut needs = HashMap::new();
-        needs.insert("requestPath".to_string(), "lingva.pot-app.com".to_string());
-        let result = translate("你好 世界！", "auto", "en", "zh_cn", needs).unwrap();
-        println!("{result}");
-    }
+    let prompt = match needs.get("prompt") {
+        Some(prompt) => format!("{}\nOutput Language:{}", prompt, to),
+        None => format!("Output Language:{}", to),
+    };
+
+    let stream = match needs.get("stream") {
+        Some(stream) => stream.to_lowercase() == "true",
+        None => false,
+    };
+    
+    let temperature = match needs.get("temperature") {
+        Some(temperature) => temperature.parse::<f64>().unwrap_or(0.5),
+        None => 0.5,
+    };
+    
+    let presence_penalty = match needs.get("presence_penalty") {
+        Some(presence_penalty) => presence_penalty.parse::<f64>().unwrap_or(0.0),
+        None => 0.0,
+    };
+    
+    let frequency_penalty = match needs.get("frequency_penalty") {
+        Some(frequency_penalty) => frequency_penalty.parse::<f64>().unwrap_or(0.0),
+        None => 0.0,
+    };
+    
+    let top_p = match needs.get("top_p") {
+        Some(top_p) => top_p.parse::<f64>().unwrap_or(1.0),
+        None => 1.0,
+    };
+
+    let request_body = json!({
+        "messages": [
+            {
+                "role": "system",
+                "content": prompt
+            },
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": text
+                    }
+                ]
+            }
+        ],
+        "stream": stream,
+        "model": model,
+        "temperature": temperature,
+        "presence_penalty": presence_penalty,
+        "frequency_penalty": frequency_penalty,
+        "top_p": top_p
+    });
+
+    let response = client
+        .post(&endpoint)
+        .header("Accept", "application/json, text/event-stream")
+        .header("Content-Type", "application/json")
+        .header("authorization", format!("Bearer {}", apikey))
+        .json(&request_body)
+        .send()?;
+    let response_text = response.text()?; // 获取响应文本
+    let response_json: Value = serde_json::from_str(&response_text).map_err(|e| {
+        eprintln!("Error decoding response body: {}", e);
+        eprintln!("Response body: {}", response_text);
+        "Response Parse Error"
+    })?; // 解析 JSON 并处理错误
+
+    response_json["choices"][0]["message"]["content"]
+        .as_str()
+        .map(|result| Value::String(result.to_string()))
+        .ok_or_else(|| {
+            eprintln!("Response JSON does not contain the expected structure: {}", response_json);
+            "Response Parse Error".into()
+        }) // 从 JSON 中提取内容，并处理可能的错误
+    
 }
