@@ -1,10 +1,65 @@
 {
-  "id": "[plugin].com.pot-app.lingva",
+  "id": "ceui.com.pot-app.ceui",
   "plugin_type": "translate",
-  "icon": "lingva.svg",
-  "display": "Lingva",
-  "homepage": "https://github.com/pot-app/pot-app-translate-plugin-template",
-  "needs": [{ "key": "requestPath", "display": "请求地址" }],
+  "icon": "LogosPuppyLinux.svg",
+  "display": "CEUI",
+  "homepage": "",
+  "needs": [
+    {
+      "key": "apikey",
+      "display": "API Key",
+      "type": "input"
+    },
+    {
+      "key": "endpoint",
+      "display": "API Endpoint",
+      "type": "input"
+    },
+    {
+      "key": "model",
+      "display": "Model",
+      "type": "input"
+    },
+    {
+      "key": "prompt",
+      "display": "Prompt",
+      "type": "input"
+    },
+    {
+      "key": "stream",
+      "display": "Stream",
+      "type": "select",
+      "options": {
+        "true": "True",
+        "false": "False"
+      }
+    },
+    {
+      "key": "timeout",
+      "display": "Timeout (seconds)",
+      "type": "input"
+    },
+    {
+      "key": "temperature",
+      "display": "Temperature",
+      "type": "input"
+    },
+    {
+      "key": "presence_penalty",
+      "display": "Presence Penalty",
+      "type": "input"
+    },
+    {
+      "key": "frequency_penalty",
+      "display": "Frequency Penalty",
+      "type": "input"
+    },
+    {
+      "key": "top_p",
+      "display": "Top P",
+      "type": "input"
+    }
+  ],
   "language": {
     "auto": "auto",
     "zh_cn": "zh",
