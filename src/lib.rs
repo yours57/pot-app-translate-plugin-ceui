@@ -76,12 +76,7 @@ pub fn translate(
             },
             {
                 "role": "user",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": text
-                    }
-                ]
+                "content": text
             }
         ],
         "stream": stream,
@@ -99,19 +94,24 @@ pub fn translate(
         .header("authorization", format!("Bearer {}", apikey))
         .json(&request_body)
         .send()?;
-    let response_text = response.text()?; // 获取响应文本
+    
+    let response_text = response.text()?;
     let response_json: Value = serde_json::from_str(&response_text).map_err(|e| {
         eprintln!("Error decoding response body: {}", e);
         eprintln!("Response body: {}", response_text);
         "Response Parse Error"
-    })?; // 解析 JSON 并处理错误
+    })?;
+    
+    // 检查是否包含错误字段
+    if let Some(error) = response_json.get("error") {
+        return Err(format!("API Error: {}", error).into());
+    }
+    
+    // 提取正常响应字段
+    match response_json["choices"][0]["message"]["content"].as_str() {
+        Some(result) => Ok(Value::String(result.to_string())),
+        None => Err("Response Parse Error".into()),
+    }
 
-    response_json["choices"][0]["message"]["content"]
-        .as_str()
-        .map(|result| Value::String(result.to_string()))
-        .ok_or_else(|| {
-            eprintln!("Response JSON does not contain the expected structure: {}", response_json);
-            "Response Parse Error".into()
-        }) // 从 JSON 中提取内容，并处理可能的错误
     
 }
